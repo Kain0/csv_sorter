@@ -1,9 +1,10 @@
 import csv
 import os
+import time
 
 
 class Sorter:
-    chunk_size = 256
+    chunk_size = 2048
 
     def __init__(self, path):
         self.size = 0
@@ -12,31 +13,23 @@ class Sorter:
         self.clear_all_temp_files(3)
         self.temp_files_count = 0
         self.is_string = False
-
-        with open(self.path, 'r', encoding='utf-8') as f:
-            reader = csv.reader(f)
-            count = 0
-            for row in reader:
-                if not row:
-                    continue
-                print(row)
-                count += 1
-                if count == 10:
-                    break
         self.clear_all_temp_files(3)
 
     def sort(self, index, is_str=False):
         self.is_string = is_str
         self.sort_index = index
         self.make_start_chunks()
-        print(self.size)
+        print("found elements: ", self.size)
+        step = 2
         while self.chunk_size < self.size:
             self.sum_up()
+            print("step", step, "done (merge)", "| chunk_size: ", self.chunk_size)
+            step += 1
             self.chunk_size *= 2
             if self.chunk_size < self.size:
-                print(self.chunk_size)
                 self.split_up()
-
+        self.sum_up()
+        print("step", step, "done (merge)", "| chunk_size: ", self.chunk_size)
         try:
             os.remove(self.path + "_sorted.csv")
         except OSError:
@@ -44,79 +37,79 @@ class Sorter:
         os.rename("2temp.csv", self.path + "_sorted.csv")
         self.clear_all_temp_files(2)
 
+    def check(self):
         with open(self.path + "_sorted.csv", 'r', encoding='utf-8') as f:
             reader = csv.reader(f)
             last = None
             count = 0
-            count2 = 0
+            count_valid = 0
             for row in reader:
                 count += 1
                 if not last:
                     last = row
                     continue
 
-                #print(row[self.sort_index])
-                if float(row[self.sort_index]) >= float(last[self.sort_index]):
-                    #print(row[self.sort_index])
-                    count2 += 1
+                # print(row[self.sort_index])
+                if self.compare(last, row):
+                    # print(row[self.sort_index])
+                    count_valid += 1
                 last = row.copy()
-            print(count)
-            print(count2)
+            if count == self.size and count == count_valid + 1:
+                print("sort finished!")
+            else:
+                print("sort result doesn't seem alright :(")
 
     def sum_up(self):  # like merge
-        try:
-            self.clear_temp_file(2)
-            with open("0temp.csv", 'r', encoding='utf-8') as f1:
-                temp0 = csv.reader(f1)
-                with open("1temp.csv", 'r', encoding='utf-8') as f2:
-                    temp1 = csv.reader(f2)
-                    with open("2temp.csv", 'a+', encoding='utf-8', newline='\n') as f3:
-                        writer = csv.writer(f3)
 
-                        next_row_0 = self.next_row(temp0)
-                        next_row_1 = self.next_row(temp1)
+        self.clear_temp_file(2)
+        with open("0temp.csv", 'r', encoding='utf-8') as f1:
+            temp0 = csv.reader(f1)
+            with open("1temp.csv", 'r', encoding='utf-8') as f2:
+                temp1 = csv.reader(f2)
+                with open("2temp.csv", 'a+', encoding='utf-8', newline='\n') as f3:
+                    writer = csv.writer(f3)
 
-                        k = 0
-                        j = 0
-                        while next_row_0 or next_row_1:
-                            if k >= self.chunk_size and j >= self.chunk_size:
-                                k = 0
-                                j = 0
-                                continue
-                            if k >= self.chunk_size > j and next_row_1:
-                                writer.writerow(next_row_1)
-                                next_row_1 = self.next_row(temp1)
-                                j += 1
-                                continue
-                            if j >= self.chunk_size > k and next_row_0:
-                                writer.writerow(next_row_0)
-                                next_row_0 = self.next_row(temp0)
-                                k += 1
-                                continue
+                    next_row_0 = self.next_row(temp0)
+                    next_row_1 = self.next_row(temp1)
 
-                            if not next_row_0:
-                                writer.writerow(next_row_1)
-                                next_row_1 = self.next_row(temp1)
-                                j += 1
-                                continue
-                            if not next_row_1:
-                                writer.writerow(next_row_0)
-                                next_row_0 = self.next_row(temp0)
-                                k += 1
-                                continue
+                    k = 0
+                    j = 0
+                    while next_row_0 is not None or next_row_1 is not None:
+                        if k >= self.chunk_size and j >= self.chunk_size:
+                            k = 0
+                            j = 0
+                            continue
+                        if k >= self.chunk_size > j and next_row_1 is not None:
+                            writer.writerow(next_row_1)
+                            next_row_1 = self.next_row(temp1)
+                            j += 1
+                            continue
+                        if j >= self.chunk_size > k and next_row_0 is not None:
+                            writer.writerow(next_row_0)
+                            next_row_0 = self.next_row(temp0)
+                            k += 1
+                            continue
 
-                            # usual case
-                            if self.compare(next_row_0, next_row_1):
-                                writer.writerow(next_row_0)
-                                next_row_0 = self.next_row(temp0)
-                                k += 1
-                            else:
-                                writer.writerow(next_row_1)
-                                next_row_1 = self.next_row(temp1)
-                                j += 1
-        except:
-            print("Error: on merging two summin")
-            exit(-1)
+                        if next_row_0 is None:
+                            writer.writerow(next_row_1)
+                            next_row_1 = self.next_row(temp1)
+                            j += 1
+                            continue
+                        if next_row_1 is None:
+                            writer.writerow(next_row_0)
+                            next_row_0 = self.next_row(temp0)
+                            k += 1
+                            continue
+
+                        # usual case
+                        if self.compare(next_row_0, next_row_1):
+                            writer.writerow(next_row_0)
+                            next_row_0 = self.next_row(temp0)
+                            k += 1
+                        else:
+                            writer.writerow(next_row_1)
+                            next_row_1 = self.next_row(temp1)
+                            j += 1
 
     def split_up(self):
         try:
@@ -134,7 +127,7 @@ class Sorter:
                         temp1 = csv.writer(f1)
 
                         for row in reader:
-                            if elements_count == self.chunk_size:
+                            if elements_count >= self.chunk_size:
                                 chunk_index = (chunk_index + 1) % 2
                                 elements_count = 0
                             elements_count += 1
@@ -153,19 +146,24 @@ class Sorter:
                 for row in reader:
                     if not row:
                         continue
-                    self.size += 1
                     if len(chunk) == self.chunk_size:
-                        if not self.is_string:
-                            chunk.sort(key=lambda x: float(x[self.sort_index]))
+                        if self.is_string:
+                            chunk.sort(key=lambda x: str(x[self.sort_index]))
                         else:
-                            chunk.sort(key=lambda x: x[self.sort_index])
+                            chunk.sort(key=lambda x: float(x[self.sort_index]))
                         self.write_chunk(chunk, chunk_index)
                         chunk = []
                         chunk_index = (chunk_index + 1) % 2
-
+                    self.size += 1
                     chunk.append(row)
+
                 if chunk:
+                    if self.is_string:
+                        chunk.sort(key=lambda x: str(x[self.sort_index]))
+                    else:
+                        chunk.sort(key=lambda x: float(x[self.sort_index]))
                     self.write_chunk(chunk, chunk_index)
+            print("step 1 done (sort chunks)")
         except OSError:
             print("Error:  on creating start chunks")
             exit(-1)
@@ -202,7 +200,7 @@ class Sorter:
             row = next(file)
             return row
         except StopIteration:
-            return []
+            return None
 
     @staticmethod
     def clear_temp_file(index):
@@ -223,27 +221,37 @@ class Sorter:
 
     def compare(self, row1, row2):
         try:
-            if not self.is_string:
-                return float(row1[self.sort_index]) < float(row2[self.sort_index])
+            if self.is_string:
+                return row1[self.sort_index] <= row2[self.sort_index]
             else:
-                return row1[self.sort_index] < row2[self.sort_index]
+                return float(row1[self.sort_index]) <= float(row2[self.sort_index])
         except:
-            print("Error: cannot compare. maybe wrong types")
+            print("Error: cannot compare. maybe wrong types:")
+            print(row1)
+            print(row2)
             exit(-1)
 
 
-# Press the green button in the gutter to run the script.
 if __name__ == '__main__':
 
-    print("Write file name, index of column, and type in format {file_name} {index} {type}")
+    print("Write info about sort in format: file_name index type")
     is_valid = False
+    name, i, data_type = None, None, None
     while not is_valid:
-        name, i, is_string = input(":").split()
+        name, i, data_type = input(":").split()
+        data_type = data_type == "s"
         if str(i).isdigit() and int(i) >= 0:
             is_valid = True
+            i = int(i)
         else:
             print("Error: index is wrong")
 
-    s = Sorter(r"C:\Users\andre\Downloads\steam.csv\steam.csv")
+    s = Sorter(name)
+    s.chunk_size = 2 ** 20
 
-    s.sort(2, False)
+    start = time.time()
+    s.sort(i, data_type)
+    end = time.time() - start
+
+    s.check()
+    print("time: ", end)
